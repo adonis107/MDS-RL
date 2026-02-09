@@ -3,3 +3,10 @@ __pycache__/
 
 *.pyc
 *.npy
+*.docx
+
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.log
