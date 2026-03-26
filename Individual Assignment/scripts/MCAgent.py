@@ -22,9 +22,9 @@ class GLIEMCAgent:
         self.epsilon = 1.0
         self.episode_count = 0
 
-    # ---------- policy ----------
+    # policy
     def get_action(self, state: tuple) -> int:
-        """Select an action using the ε-greedy policy w.r.t. current Q."""
+        """Select an action using the epsilon-greedy policy w.r.t. current Q."""
         if np.random.random() < self.epsilon:
             return np.random.randint(self.n_actions)
         # greedy: pick action with highest Q (break ties randomly)
@@ -40,7 +40,7 @@ class GLIEMCAgent:
         best_actions = [a for a, q in enumerate(q_values) if q == max_q]
         return np.random.choice(best_actions)
 
-    # ---------- learning ----------
+    # learning
     def update(self, episode: list[tuple], gamma: float = 1.0):
         """
         Update Q from a complete episode using first-visit MC.
@@ -66,25 +66,33 @@ class GLIEMCAgent:
                 self.Q[sa] += (1.0 / self.N[sa]) * (G - self.Q[sa])
 
     def decay_epsilon(self):
-        """GLIE epsilon decay: ε = 1/k, floored at min_epsilon."""
+        """GLIE epsilon decay: epsilon = 1/k, floored at min_epsilon."""
         self.episode_count += 1
         self.epsilon = max(self.min_epsilon, 1.0 / self.episode_count)
 
 if __name__ == "__main__":
-    # Load the trained agent
-    save_path = Path(__file__).resolve().parent.parent / "results" / "MC" / "mc_agent.pkl"
-    with open(save_path, 'rb') as f:
-        data = pickle.load(f)
+    project_root = Path(__file__).resolve().parents[1]
+    results_dir = project_root / 'results' / 'MC'
+    results_dir.mkdir(parents=True, exist_ok=True)
+    save_path = results_dir / 'mc_agent.pkl'
 
     # Play one episode with the screen renderer
     demo_env = gym.make('TextFlappyBird-screen-v0', height=15, width=20, pipe_gap=4)
     # We also need the simple-state env running in parallel to get (x, y) for our Q-table
     state_env = gym.make('TextFlappyBird-v0', height=15, width=20, pipe_gap=4)
+    
     agent = GLIEMCAgent(n_actions=state_env.action_space.n, min_epsilon=0.01)
-    agent.Q = defaultdict(float, data['Q'])
-    agent.N = defaultdict(int, data['N'])
-    agent.epsilon = data['epsilon']
-    agent.episode_count = data['episode_count']
+    if save_path.exists():
+        with open(save_path, 'rb') as f:
+            data = pickle.load(f)
+            agent.Q = defaultdict(float, data['Q'])
+            agent.N = defaultdict(int, data['N'])
+            agent.epsilon = data['epsilon']
+            agent.episode_count = data['episode_count']
+        print(f"Agent loaded from {save_path}")
+    else:
+        print(f"No saved agent found at {save_path}. Please train the agent first.")
+        sys.exit(1)
 
     obs_screen, _ = demo_env.reset()
     obs_state, _ = state_env.reset()
@@ -104,6 +112,6 @@ if __name__ == "__main__":
         sys.stdout.write(demo_env.render())
         time.sleep(0.15)
 
-    print(f"\nGame Over — Total Reward: {total_reward}")
+    print(f"\nGame Over - Total Reward: {total_reward}")
     demo_env.close()
     state_env.close()
