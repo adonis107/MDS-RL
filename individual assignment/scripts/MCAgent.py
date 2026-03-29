@@ -13,11 +13,14 @@ import text_flappy_bird_gym
 class GLIEMCAgent:
     """GLIE Monte-Carlo Control agent for Text Flappy Bird."""
 
-    def __init__(self, n_actions: int = 2, min_epsilon: float = 0.01):
+    def __init__(self, n_actions: int = 2, min_epsilon: float = 0.01, max_epsilon: float = 1.0, decay_step: float = 0.0001, lambda_: float = 0.0001):
         self.n_actions = n_actions
         self.min_epsilon = min_epsilon
+        self.max_epsilon = max_epsilon
+        self.decay_step = decay_step    # for linear decay
+        self.lambda_ = lambda_          # for exponential decay
         # Q-values and visit counts stored as dicts for sparse state space
-        self.Q = defaultdict(float)        # (state, action) -> value
+        self.Q = defaultdict(float)         # (state, action) -> value
         self.N = defaultdict(int)           # (state, action) -> visit count
         self.epsilon = 1.0
         self.episode_count = 0
@@ -65,10 +68,16 @@ class GLIEMCAgent:
                 # Incremental mean update: Q ← Q + (1/N)(G - Q)
                 self.Q[sa] += (1.0 / self.N[sa]) * (G - self.Q[sa])
 
-    def decay_epsilon(self):
-        """GLIE epsilon decay: epsilon = 1/k, floored at min_epsilon."""
+    def decay_epsilon(self, n_episodes: int, decay_type: str = "linear"):
+        """GLIE epsilon decay: linear decay over all training episodes."""
         self.episode_count += 1
-        self.epsilon = max(self.min_epsilon, 1.0 / self.episode_count)
+        if decay_type == "inverse":
+            self.epsilon = max(self.min_epsilon, 1.0 / self.episode_count)
+        elif decay_type == "linear":
+            self.epsilon = max(self.min_epsilon, self.max_epsilon - self.episode_count * self.decay_step)
+        elif decay_type == "exponential":
+            self.epsilon = self.min_epsilon + (self.max_epsilon - self.min_epsilon) * np.exp(- self.lambda_ * self.episode_count)
+
 
 if __name__ == "__main__":
     project_root = Path(__file__).resolve().parents[1]
@@ -76,12 +85,12 @@ if __name__ == "__main__":
     results_dir.mkdir(parents=True, exist_ok=True)
     save_path = results_dir / 'mc_agent.pkl'
 
-    # Play one episode with the screen renderer
-    demo_env = gym.make('TextFlappyBird-screen-v0', height=15, width=20, pipe_gap=4)
-    # We also need the simple-state env running in parallel to get (x, y) for our Q-table
-    state_env = gym.make('TextFlappyBird-v0', height=15, width=20, pipe_gap=4)
+    # Single environment: simple-state variant also supports render()
+    env = gym.make('TextFlappyBird-v0', height=15, width=20, pipe_gap=4)
     
-    agent = GLIEMCAgent(n_actions=state_env.action_space.n, min_epsilon=0.01)
+    # Create agent
+    agent = GLIEMCAgent(n_actions=env.action_space.n, min_epsilon=0.01)
+    
     if save_path.exists():
         with open(save_path, 'rb') as f:
             data = pickle.load(f)
@@ -94,24 +103,21 @@ if __name__ == "__main__":
         print(f"No saved agent found at {save_path}. Please train the agent first.")
         sys.exit(1)
 
-    obs_screen, _ = demo_env.reset()
-    obs_state, _ = state_env.reset()
+    obs, _ = env.reset()
 
     done = False
     total_reward = 0
 
     while not done:
-        state = tuple(obs_state)
+        state = tuple(obs)
         action = agent.greedy_action(state)
 
-        obs_screen, reward, done, _, info = demo_env.step(action)
-        obs_state, _, _, _, _ = state_env.step(action)
+        obs, reward, done, _, info = env.step(action)
         total_reward += reward
 
         os.system("cls" if os.name == "nt" else "clear")
-        sys.stdout.write(demo_env.render())
+        sys.stdout.write(env.render())
         time.sleep(0.15)
 
     print(f"\nGame Over - Total Reward: {total_reward}")
-    demo_env.close()
-    state_env.close()
+    env.close()
