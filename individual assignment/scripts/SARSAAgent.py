@@ -107,12 +107,11 @@ if __name__ == "__main__":
     results_dir.mkdir(parents=True, exist_ok=True)
     save_path = results_dir / 'sarsa_lambda_agent.pkl'
 
-    # Play one episode with the screen renderer
-    demo_env = gym.make('TextFlappyBird-screen-v0', height=15, width=20, pipe_gap=4)
-    state_env = gym.make('TextFlappyBird-v0', height=15, width=20, pipe_gap=4)
+    # Single environment: simple-state variant also supports render()
+    env = gym.make('TextFlappyBird-v0', height=15, width=20, pipe_gap=4)
 
     # Create agent
-    agent = SarsaLambdaAgent(n_actions=state_env.action_space.n)
+    agent = SarsaLambdaAgent(n_actions=env.action_space.n)
 
     if save_path.exists():
         with open(save_path, 'rb') as f:
@@ -128,25 +127,21 @@ if __name__ == "__main__":
         print(f"No saved agent found at {save_path}. Please train the agent first.")
         sys.exit(1)
 
-
-    obs_screen, _ = demo_env.reset()
-    obs_state, _ = state_env.reset()
+    obs, _ = env.reset()
 
     done = False
     total_reward = 0
 
     while not done:
-        state = tuple(obs_state)
+        state = tuple(obs)
         action = agent.greedy_action(state)
 
-        obs_screen, reward, done, _, info = demo_env.step(action)
-        obs_state, _, _, _, _ = state_env.step(action)
+        obs, reward, done, _, info = env.step(action)
         total_reward += reward
 
         os.system("cls" if os.name == "nt" else "clear")
-        sys.stdout.write(demo_env.render())
+        sys.stdout.write(env.render())
         time.sleep(0.15)
 
     print(f"\nGame Over - Total Reward: {total_reward}")
-    demo_env.close()
-    state_env.close()
+    env.close()
